@@ -1,71 +1,77 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Merge two subarrays L and M into arr
-void merge(int arr[], int p, int q, int r) {
+// Merge two sorted subarrays of the array
+void merge(int arr[], int left, int mid, int right) {
 
     // Create L ← A[p..q] and M ← A[q+1..r]
-    int n1 = q - p + 1;
-    int n2 = r - q;
+    int n_left = mid - left + 1;
+    int n_right = right - mid;
 
-    int *L = (int*)malloc(n1 * sizeof(int));
-    int *M = (int*)malloc(n2 * sizeof(int));
+    int *left_arr = (int*)malloc(n_left * sizeof(int));
+    int *right_arr = (int*)malloc(n_right * sizeof(int));
 
-    for (int i = 0; i < n1; i++)
-        L[i] = arr[p + i];
-    for (int j = 0; j < n2; j++)
-        M[j] = arr[q + 1 + j];
+    for (int i = 0; i < n_left; i++)
+        left_arr[i] = arr[left + i];
+    for (int j = 0; j < n_right; j++)
+        right_arr[j] = arr[mid + 1 + j];
 
     // Maintain current index of sub-arrays and main array
     int i, j, k;
     i = 0;
     j = 0;
-    k = p;
+    k = left;
 
     // Until we reach either end of either L or M, pick larger among
     // elements L and M and place them in the correct position at A[p..r]
-    while (i < n1 && j < n2) {
-        if (L[i] <= M[j]) {
-        arr[k] = L[i];
-        i++;
+    while (i < n_left && j < n_right) {
+        if (left_arr[i] <= right_arr[j]) {
+        arr[k++] = left_arr[i++];
         } else {
-        arr[k] = M[j];
-        j++;
+        arr[k++] = right_arr[j++];
         }
-        k++;
     }
 
     // When we run out of elements in either L or M,
     // pick up the remaining elements and put in A[p..r]
-    while (i < n1) {
-        arr[k] = L[i];
-        i++;
-        k++;
+    while (i < n_left) {
+        arr[k++] = left_arr[i++];
     }
 
-    while (j < n2) {
-        arr[k] = M[j];
-        j++;
-        k++;
+    while (j < n_right) {
+        arr[k++] = right_arr[j++];
     }
 
-    free(L);
-    free(M);
+    free(left_arr);
+    free(right_arr);
 
 }
 
 // Divide the array into two subarrays, sort them and merge them
-void mergeSort(int arr[], int l, int r) {
-    if (l < r) {
+void mergeSort(int arr[], int left, int right) {
+    if (left < right) {
 
         // m is the point where the array is divided into two subarrays
-        int m = l + (r - l) / 2;
+        int mid = left + (right - left) / 2;
 
-        mergeSort(arr, l, m);
-        mergeSort(arr, m + 1, r);
+        mergeSort(arr, left, mid);
+        mergeSort(arr, mid + 1, right);
 
         // Merge the sorted subarrays
-        merge(arr, l, m, r);
+        merge(arr, left, mid, right);
+    }
+}
+
+void parallelMergeSort(int arr[], int left, int right) {
+    if (left < right) {
+
+        // m is the point where the array is divided into two subarrays
+        int mid = left + (right - left) / 2;
+
+        //TODO
+
+        // Merge the sorted subarrays
+        merge(arr, left, mid, right);
     }
 }
 
@@ -100,6 +106,8 @@ int main(int argc, char *argv[]) {
 
     // Close the file
     fclose(fp);
+
+    //TODO
 
     // Sort the numbers using merge sort
     mergeSort(num, 0, size - 1);
