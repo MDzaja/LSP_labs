@@ -153,7 +153,7 @@ WorkerTask waitForNewTask(int workerId, Monitor *m)
         pthread_exit(&statusWorker[workerId]);
     }
 
-    if (m->workerStateArr[workerId].state == AVAILABLE && m->workerStateArr[workerId].terminate == false)//TODO
+    if (m->workerStateArr[workerId].state == AVAILABLE && m->workerStateArr[workerId].terminate == false)
     {
         if ((statusWorker[workerId] = pthread_cond_wait(&waitingForTask[workerId], &accessCR)) != 0)
         {
