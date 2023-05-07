@@ -7,11 +7,13 @@
 #include <sys/time.h>
 #include <mpi.h>
 
+// Define constants for task types and termination
 #define TASK_META_OR_TERMINATE 1
 #define TASK_DATA 2
 #define TASK_DONE 3
 #define TERMINATED 4
 
+// Task struct definition
 typedef struct Task
 {
     int left;
@@ -22,14 +24,21 @@ typedef struct Task
     struct Task *rightParent;
 } Task;
 
-void *thread_work(void *arg);
+// Distribute tasks among the workers, receive results, and return the sorted array.
 int *distributor(char *filename, int num_workers, int *arr_size);
+// Worker process that receives tasks, performs merge sort or merge operation, and sends back results.
 void worker(int wIndex);
+// Read integers from a binary file and return them as an array.
 int *readFile(char *filename, int *size);
+// Create an array of tasks to perform merge sort on the given array.
 Task *createTasks(int *taskArrSize, int left, int right, int num_workers);
+// Check if the given array is sorted.
 bool isSorted(int arr[], int size);
+// Merge two sorted subarrays of the array.
 void merge(int *arr, int left, int mid, int right);
+// Divide the array into two subarrays, sort them and merge them.
 void mergeSort(int *arr, int left, int right);
+// Receive task results from workers, update the main array and the task array, and update worker availability.
 void receiveTaskResultAndUpdateArray(int mpi_source, bool *available_workers, int *available_workers_number, int *done_tasks, int *arr, Task *task_arr);
 
 int main(int argc, char *argv[])
@@ -38,9 +47,13 @@ int main(int argc, char *argv[])
     int *seqValMin, *seqValMax, *seqValParcMin, *seqValParcMax;
     bool goOn;
     int i, n, nNorm;
+
+    // Initialize MPI environment and get the rank and size
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nProc);
+
+    // Check if the number of processes is greater than 1
     if (nProc <= 1)
     {
         if (rank == 0)
@@ -49,6 +62,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // Check if the correct number of command line arguments are provided
     if (argc != 2)
     {
         if (rank == 0)
@@ -57,13 +71,16 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // Distributor process (rank 0)
     if (rank == 0)
     {
-
         struct timeval begin, end;
         int i, arr_size;
+
+        // Get the start time
         gettimeofday(&begin, 0);
 
+        // Call the distributor function and receive the sorted array
         int *arr = distributor(argv[1], nProc - 1, &arr_size);
 
         // Calculate the execution time
@@ -93,8 +110,11 @@ int main(int argc, char *argv[])
             printf("Everything is OK!\n");
         }
     }
+    // Worker process (rank != 0)
     else
     {
+        // Call the worker function, as long as the distributor
+        // process has not signaled termination, receive a new task
         worker(rank);
     }
 
@@ -107,43 +127,56 @@ int *distributor(char *filename, int num_workers, int *arr_size)
     MPI_Status status;
     MPI_Request request;
 
+    // Read the input file and store the data in an array
     int *arr = readFile(filename, arr_size);
+    // Create an array of tasks to be distributed among the workers
     int taskArrSize;
     Task *taskArr = createTasks(&taskArrSize, 0, *arr_size - 1, num_workers);
+
     int currentTaskIndex = 0;
     int doneTasks = 0;
     int numberOfAvailableWorkers = 0;
     bool availableWorkers[num_workers];
 
+    // Initialize all workers as unavailable
     for (int i = 0; i < num_workers; i++)
     {
         availableWorkers[i] = false;
     }
+
+    // Loop until all tasks are completed
     while (doneTasks < taskArrSize)
     {
+        // If no workers are available, wait for a worker to become available
         if (numberOfAvailableWorkers == 0)
         {
+            // Update the task and worker status
             receiveTaskResultAndUpdateArray(MPI_ANY_SOURCE, availableWorkers, &numberOfAvailableWorkers, &doneTasks, arr, taskArr);
         }
+
+        // Check the status of each worker
         for (int i = 1; i <= num_workers; i++)
         {
+            // If the worker is not available, check if it has completed its task
             if (!availableWorkers[i - 1])
             {
                 int flag = 0;
                 MPI_Iprobe(i, TASK_DONE, MPI_COMM_WORLD, &flag, &status);
                 if (flag)
                 {
+                    // Update the task and worker status
                     receiveTaskResultAndUpdateArray(i, availableWorkers, &numberOfAvailableWorkers, &doneTasks, arr, taskArr);
                 }
             }
         }
-        
+
         //  Distribute tasks to available workers
         for (int i = 1; i <= num_workers && currentTaskIndex < taskArrSize; i++)
         {
             Task task = taskArr[currentTaskIndex];
             if (availableWorkers[i - 1])
             {
+                // Ensure the task's dependencies are completed before sending it
                 if ((task.leftParent == NULL || task.leftParent->done) && (task.rightParent == NULL || task.rightParent->done))
                 {
                     int seqSize = task.right - task.left + 1;
@@ -152,14 +185,19 @@ int *distributor(char *filename, int num_workers, int *arr_size)
                         task.leftParent == NULL ? 1 : 0,
                         task.mid - task.left,
                         seqSize};
+                    // Send the task metadata to the worker: 
+                    // task index, is task a leaf, index of mid element, size of sequence
                     MPI_Isend(task_meta, 4, MPI_INT, i, TASK_META_OR_TERMINATE, MPI_COMM_WORLD, &request);
 
+                    // Send the task data to the worker
                     int *seq = (int *)malloc(seqSize * sizeof(int));
                     for (int j = 0; j < seqSize; j++)
                     {
                         seq[j] = arr[task.left + j];
                     }
                     MPI_Send(seq, seqSize, MPI_INT, i, TASK_DATA, MPI_COMM_WORLD);
+
+                    // Mark the worker as busy
                     availableWorkers[i - 1] = false;
                     numberOfAvailableWorkers--;
                     currentTaskIndex++;
@@ -184,7 +222,7 @@ int *distributor(char *filename, int num_workers, int *arr_size)
         int tmp;
         MPI_Recv(&tmp, 1, MPI_INT, i, TERMINATED, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
-    
+
     return arr;
 }
 
@@ -193,37 +231,50 @@ void worker(int rank)
     MPI_Status status;
     MPI_Request request;
 
-    // Notify distributor that the worker is ready
+    // Notify distributor that the worker is ready to receive tasks
     int dummy = -1;
     MPI_Send(&dummy, 1, MPI_INT, 0, TASK_DONE, MPI_COMM_WORLD);
-    
+
+    // Main loop for processing tasks
     while (1)
     {
         int task_meta[4];
+        // Receive task metadata or termination signal from the distributor
         MPI_Recv(task_meta, 4, MPI_INT, 0, TASK_META_OR_TERMINATE, MPI_COMM_WORLD, &status);
+
+        // Check if the received message is not a termination signal
         if (task_meta[0] != -1)
         {
+            // Extract the task metadata
             int taskIndex = task_meta[0];
             bool leafTask = task_meta[1] == 1;
             int mid = task_meta[2];
             int seqSize = task_meta[3];
+
+            // Receive the task data from the distributor
             int *seq = (int *)malloc(seqSize * sizeof(int));
             MPI_Recv(seq, seqSize, MPI_INT, 0, TASK_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+            // Process the received task
             if (leafTask)
             {
+                // Sort the sequence using merge sort
                 mergeSort(seq, 0, seqSize - 1);
             }
             else
             {
+                // Merge the two sorted subsequences
                 merge(seq, 0, mid, seqSize - 1);
             }
 
+            // Notify the distributor that the task is done and send the task index
             MPI_Isend(&taskIndex, 1, MPI_INT, 0, TASK_DONE, MPI_COMM_WORLD, &request);
+            // Send the processed data back to the distributor
             MPI_Send(seq, seqSize, MPI_INT, 0, TASK_DATA, MPI_COMM_WORLD);
         }
         else
         {
+            // If the termination signal is received, notify the distributor and exit the loop
             int dummy;
             MPI_Send(&dummy, 1, MPI_INT, 0, TERMINATED, MPI_COMM_WORLD);
             break;
@@ -244,13 +295,15 @@ int *readFile(char *filename, int *size)
         exit(1);
     }
 
+    // Read the size of the array from the file
     __attribute__((unused)) size_t bytes_read = fread(size, sizeof(int), 1, fp);
 
+    // Print the size of the array
     printf("Size: %d \n", *size);
 
     // Allocating enough space to save all the numbers read from a file
     int *arr = (int *)malloc(*size * sizeof(int));
-    // Read the numbers from the file
+    // Read the numbers from the file and store them in the array
     while (fread(&arr[n], sizeof(int), 1, fp) == 1)
     {
         n++;
@@ -259,14 +312,17 @@ int *readFile(char *filename, int *size)
     // Close the file
     fclose(fp);
 
+    // Return the pointer to the array with the numbers read from the file
     return arr;
 }
 
 Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
 {
     Task *taskArr;
+    // Check if the input range is valid
     if (left < right)
     {
+        // If there is only one worker, create a single task
         if (num_workers == 1)
         {
             taskArr = (Task *)malloc(sizeof(Task));
@@ -281,6 +337,7 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
             return taskArr;
         }
 
+        // Calculate the subarray size based on the number of workers
         int num_size = right - left + 1;
         int subarray_size = num_size / num_workers;
         if (subarray_size < 2)
@@ -288,11 +345,16 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
             subarray_size = 2;
         }
 
+        // Determine the number of leaf tasks and the height of the task tree
         int leafTasks = ceil((double)num_size / subarray_size);
         int treeHeight = ceil(log2(leafTasks));
         int maxTasks = pow(2, treeHeight + 1) - 1;
+
+        // Allocate memory for the task array
         taskArr = (Task *)malloc(maxTasks * sizeof(Task));
         int index = 0;
+
+        // Create tasks for each level of the task tree
         for (int step = subarray_size; step < num_size; step *= 2)
         {
             for (int l = left; l <= right; l += step)
@@ -302,12 +364,16 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
                 {
                     r = right;
                 }
+
+                // Initialize task with the calculated range
                 taskArr[index].left = l;
                 taskArr[index].right = r;
                 taskArr[index].done = false;
                 taskArr[index].mid = -1;
                 taskArr[index].leftParent = NULL;
                 taskArr[index].rightParent = NULL;
+
+                // Set the task's left parent
                 for (int j = index - 1; j >= 0; j--)
                 {
                     if (taskArr[j].left == l)
@@ -317,6 +383,8 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
                         break;
                     }
                 }
+
+                // Set the task's right parent
                 for (int j = index - 1; j >= 0; j--)
                 {
                     if (taskArr[j].right == r)
@@ -328,6 +396,8 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
                 index++;
             }
         }
+
+        // Create the root task
         taskArr[index].left = left;
         taskArr[index].right = right;
         taskArr[index].done = false;
@@ -335,15 +405,19 @@ Task *createTasks(int *taskArrSize, int left, int right, int num_workers)
         taskArr[index].rightParent = &taskArr[index - 1];
         taskArr[index].mid = taskArr[index].leftParent->right;
 
+        // Set the task array size and return the task array
         *taskArrSize = index + 1;
         return taskArr;
     }
+
+    // If the input range is invalid, return NULL and set the task array size to 0
     *taskArrSize = 0;
     return NULL;
 }
 
 bool isSorted(int arr[], int size)
 {
+    // Iterate through the array elements and check if they are sorted
     for (int i = 0; i < size - 1; i++)
     {
         if (arr[i] > arr[i + 1])
@@ -420,20 +494,31 @@ void mergeSort(int *arr, int left, int right)
         merge(arr, left, mid, right);
     }
 }
+
 void receiveTaskResultAndUpdateArray(int mpi_source, bool *available_workers, int *available_workers_number, int *done_tasks, int *arr, Task *task_arr)
 {
     MPI_Status status;
     int taskIndex;
+    // Receive the task index from the worker
     MPI_Recv(&taskIndex, 1, MPI_INT, mpi_source, TASK_DONE, MPI_COMM_WORLD, &status);
+    // Mark the worker as available
     available_workers[status.MPI_SOURCE - 1] = true;
+    // Increment the number of available workers
     (*available_workers_number)++;
+    
     if (taskIndex != -1)
     {
+        // Increment the number of done tasks
         (*done_tasks)++;
+        // Mark the task as done
         task_arr[taskIndex].done = true;
+        // Calculate the size of the sequence in the task
         int seqSize = task_arr[taskIndex].right - task_arr[taskIndex].left + 1;
+        // Allocate memory for the received sequence
         int *seq = (int *)malloc(seqSize * sizeof(int));
+        // Receive the sorted sequence from the worker
         MPI_Recv(seq, seqSize, MPI_INT, status.MPI_SOURCE, TASK_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // Update the main array with the received sorted sequence
         for (int i = 0; i < seqSize; i++)
         {
             arr[task_arr[taskIndex].left + i] = seq[i];
