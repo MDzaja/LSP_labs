@@ -5,7 +5,6 @@
 #include <ctype.h>
 #include <mpi.h>
 #include <sys/time.h>
-#include "prog2monitor.h"
 
 
 #define MAX_WORD_LENGTH 100
@@ -13,7 +12,6 @@
 #define MAX_CHUNK_SIZE 3000
 
 int *statusWorker;
-Monitor m;
 
 long* split_file(char* filename, int num_chunks);
 void replace_portuguese_chars(char *str);
