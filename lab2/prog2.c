@@ -308,6 +308,7 @@ int *readFile(char *filename, int *size)
     {
         n++;
     }
+    printf("last number: %d\n", arr[n - 1]); // Print the last number read from the file
 
     // Close the file
     fclose(fp);
