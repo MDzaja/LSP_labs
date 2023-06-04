@@ -12,6 +12,15 @@ __device__ void mergeSort(int *arr, int startingColumnIndex, int left, int right
 __device__ void merge(int *arr, int startingColumnIndex, int left, int mid, int right);
 __device__ int calcIndex(int startingColumnIndex, int i);
 
+__device__ int calcIndex(int startingColumnIndex, int i) {
+    int rel_column_i = i / COL_ROW_SIZE;
+    int i_in_column = i % COL_ROW_SIZE;
+    // startingColumnIndex = global_thread_index * pow(2, iteration) - index of first element in that subsequence
+    // rel_column_i = i / COL_ROW_SIZE - relative column index where the element is
+    // i_in_column = i % COL_ROW_SIZE - index of the element in the column
+    return startingColumnIndex + rel_column_i + i_in_column * COL_ROW_SIZE;
+}
+
 __global__ void mergeSort_cuda(int *array, int iter)
 {
     // 2D grid and block
@@ -193,13 +202,4 @@ __device__ void mergeSort(int *arr, int startingColumnIndex, int left, int right
         // Merge the sorted subarrays
         merge(arr, startingColumnIndex, left, mid, right);
     }
-}
-
-__device__ int calcIndex(int startingColumnIndex, int i) {
-    int rel_column_i = i / COL_ROW_SIZE;
-    int i_in_column = i % COL_ROW_SIZE;
-    // startingColumnIndex = global_thread_index * pow(2, iteration) - index of first element in that subsequence
-    // rel_column_i = i / COL_ROW_SIZE - relative column index where the element is
-    // i_in_column = i % COL_ROW_SIZE - index of the element in the column
-    return startingColumnIndex + rel_column_i + i_in_column * COL_ROW_SIZE;
 }
