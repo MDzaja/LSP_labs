@@ -21,22 +21,16 @@ __global__ void mergeSort_cuda(int *array, int iter)
     int left = idx * subseq_size;
     int right = (idx + 1) * subseq_size - 1;
 
-    // Perform the merge sort operation.
-    mergeSort(array, left, right);
-}
+    if(iter == 0) {
+        // Perform the merge sort operation.
+        mergeSort(array, left, right);
+    } else {
+        int mid = left + (right - left) / 2;
 
-__global__ void merge_cuda(int *array, int iter)
-{
-    int subseq_size = 1024 * pow(2, iter);
-    // 1D grid and block
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int left = idx * subseq_size;
-    int right = (idx + 1) * subseq_size - 1;
-    // m is the point where the array is divided into two subarrays
-    int mid = left + (right - left) / 2;
-
-    // Merge the two subarrays
-    merge(array, left, mid, right);
+        // Merge the two subarrays
+        merge(array, left, mid, right);
+    }
+    
 }
 
 int main(int argc, char **argv)
@@ -59,14 +53,8 @@ int main(int argc, char **argv)
     {
         int threads = 1024 / pow(2, iter);
         printf("Iteration %d, Threads: %d\n", iter+1, threads);
-        if (iter == 0)
-        {
-            mergeSort_cuda<<<1, threads>>>(array, iter);
-        }
-        else
-        {
-            merge_cuda<<<1, threads>>>(array, iter);
-        }
+
+        mergeSort_cuda<<<1, threads>>>(array, iter);
 
         // Wait for GPU to finish before accessing on host.
         cudaDeviceSynchronize();
