@@ -4,6 +4,7 @@
 #include <math.h>
 
 #define ARR_SIZE 1024 * 1024
+#define COL_ROW_SIZE 1024
 
 void readFile(char *filename, int *arr, int size);
 __device__ void mergeSort(int *arr, int left, int right);
@@ -11,13 +12,14 @@ __device__ void merge(int *arr, int left, int mid, int right);
 
 __global__ void mergeSort_cuda(int *array, int iter)
 {
-    int subseq_size = 1024 * pow(2, iter);
     // 2D grid and block
     /*int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int idx = blockDim.x * gridDim.x * y + x;*/
     // 1D grid and block
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int subseq_size = COL_ROW_SIZE * pow(2, iter);
     int left = idx * subseq_size;
     int right = (idx + 1) * subseq_size - 1;
 

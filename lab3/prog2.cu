@@ -195,7 +195,7 @@ __device__ void mergeSort(int *arr, int startingColumnIndex, int left, int right
     }
 }
 
-__host__ __device__ int calcIndex(int startingColumnIndex, int i) {
+__device__ int calcIndex(int startingColumnIndex, int i) {
     int rel_column_i = i / COL_ROW_SIZE;
     int i_in_column = i % COL_ROW_SIZE;
     // startingColumnIndex = global_thread_index * pow(2, iteration) - index of first element in that subsequence
