@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <sys/time.h>
+#include <ctype.h>
 
 #define ARR_SIZE 1024 * 1024
 #define COL_ROW_SIZE 1024
@@ -47,6 +49,10 @@ __global__ void mergeSort_cuda(int *array, int iter)
 
 int main(int argc, char **argv)
 {
+    struct timeval begin, end;
+
+    gettimeofday(&begin, 0);
+
     // Check if the correct number of command line arguments are provided
     if (argc != 2)
     {
@@ -65,7 +71,7 @@ int main(int argc, char **argv)
         int threads = 1024 / pow(2, iter);
         printf("Iteration %d, Threads: %d\n", iter+1, threads);
 
-        mergeSort_cuda<<<1, threads>>>(array, iter);
+        mergeSort_cuda<<<3, threads>>>(array, iter);
 
         // Wait for GPU to finish before accessing on host.
         cudaDeviceSynchronize();
@@ -91,6 +97,13 @@ int main(int argc, char **argv)
 
     // Free memory.
     cudaFree(array);
+
+    gettimeofday(&end, 0);
+
+    long seconds = end.tv_sec - begin.tv_sec;
+    long microseconds = end.tv_usec - begin.tv_usec;
+    double elapsed = seconds + microseconds * 1e-6;
+    printf ("\nElapsed time = %.6f s\n", elapsed);
 
     return 0;
 }
