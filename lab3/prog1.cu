@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <sys/time.h>
+#include <ctype.h>
 
 #define ARR_SIZE 1024 * 1024
 #define COL_ROW_SIZE 1024
@@ -38,6 +40,10 @@ __global__ void mergeSort_cuda(int *array, int iter)
 int main(int argc, char **argv)
 {
     // Check if the correct number of command line arguments are provided
+    struct timeval begin, end;
+
+    gettimeofday(&begin, 0);
+
     if (argc != 2)
     {
         printf("Usage: %s file1\n", argv[0]);
@@ -46,7 +52,12 @@ int main(int argc, char **argv)
     int arr_size = ARR_SIZE;
     int *array;
     // Allocate memory for the array.
-    cudaMallocManaged(&array, arr_size * sizeof(int));
+    cudaError_t err = cudaMallocManaged(&array, arr_size * sizeof(int));
+
+    if (err != cudaSuccess) {
+        printf("CUDA malloc failed: %s\n", cudaGetErrorString(err));
+        return 1;
+    }
     // Read the array from a file here.
     readFile(argv[1], array, arr_size);
 
@@ -56,7 +67,7 @@ int main(int argc, char **argv)
         int threads = 1024 / pow(2, iter);
         printf("Iteration %d, Threads: %d\n", iter+1, threads);
 
-        mergeSort_cuda<<<1, threads>>>(array, iter);
+        mergeSort_cuda<<<2, threads>>>(array, iter);
 
         // Wait for GPU to finish before accessing on host.
         cudaDeviceSynchronize();
@@ -73,12 +84,19 @@ int main(int argc, char **argv)
         }
     }
     if (i == (arr_size - 1))
-    {
+    {   
         printf("Everything is OK!\n");
     }
 
     // Free memory.
     cudaFree(array);
+
+    gettimeofday(&end, 0);
+
+    long seconds = end.tv_sec - begin.tv_sec;
+    long microseconds = end.tv_usec - begin.tv_usec;
+    double elapsed = seconds + microseconds * 1e-6;
+    printf ("\nElapsed time = %.6f s\n", elapsed);
 
     return 0;
 }
@@ -99,6 +117,7 @@ void readFile(char *filename, int *arr, int size)
     // Read the size of the array from the file
     int *true_size = (int *)malloc(sizeof(int));
     size_t bytes_read = fread(true_size, sizeof(int), 1, fp);
+
     if (size != *true_size)
     {
         printf("Error in size of the array. Array should have %d elements, but has %d elements.\n", size, *true_size);
@@ -106,9 +125,13 @@ void readFile(char *filename, int *arr, int size)
     }
 
     // Read the numbers from the file and store them in the array
-    while (fread(&arr[n], sizeof(int), 1, fp) == 1)
+    while ((bytes_read = fread(&arr[n], sizeof(int), 1, fp)) == 1)
     {
         n++;
+    }
+
+    if (ferror(fp)) {
+        exit(1);
     }
 
     // Close the file
